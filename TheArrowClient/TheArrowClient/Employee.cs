@@ -8,7 +8,7 @@ using System.Windows.Forms;
 
 namespace TheArrowClient
 {
-    internal class Employee
+    public class Employee
     {
         public Bitmap photo;
         public string lastName;

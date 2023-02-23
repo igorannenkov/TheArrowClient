@@ -10,16 +10,40 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 using System.Xml.Linq;
 using static System.Windows.Forms.VisualStyles.VisualStyleElement;
+using System.Net;
+using System.Net.Sockets;
+using System.IO;
+using Newtonsoft.Json;
 
 namespace TheArrowClient
 {
+    public enum MessageType
+    {
+        SystemMessage,
+        ContactListRenewMessage,
+        TextMessage
+    }
     public partial class ContactListForm : Form
     {
+        List<LiteEmployee> clients = new List<LiteEmployee>();
         public ContactListForm()
         {
             InitializeComponent();
-            treeView1.ExpandAll();
+            
+           
         }
+
+        private async void TestConnectionAsync()
+        {
+            using (TcpClient client = new TcpClient())
+            {
+                await client.ConnectAsync("127.0.0.1", 8888);
+                NetworkStream stream = client.GetStream();
+                StreamReader reader = new StreamReader(stream);
+                this.Text =  reader.ReadLine();
+            }
+        }
+
 
         private void treeView1_NodeMouseDoubleClick(object sender, TreeNodeMouseClickEventArgs e)
         {
@@ -134,6 +158,58 @@ namespace TheArrowClient
                     chatForm.Show();
                 }
             }
+        }
+
+        private void ContactListForm_Load(object sender, EventArgs e)
+        {
+            
+        }
+
+        private async void toolStripStatusLabel1_Click(object sender, EventArgs e)
+        {
+            treeView1.ExpandAll();
+            TcpClient client = new TcpClient("192.168.0.103", 9999);//адрес сервера
+            //client.Connect("127.0.0.1", 9999);
+            string clientInfo = JsonConvert.SerializeObject(new LiteEmployee("Пушкин", "Александр", "Сергеевич", "192.168.0.112"));//свой адрес
+
+            Message msgOut = new Message(MessageType.SystemMessage, clientInfo);
+
+
+            string msgToSend = JsonConvert.SerializeObject(msgOut);
+            StreamWriter writer = new StreamWriter(client.GetStream());
+            writer.WriteLine(msgToSend);
+            writer.Flush();
+            writer.Close();
+
+
+            TcpListener listener = new TcpListener(IPAddress.Any, 8888);
+            listener.Start();
+                while (true)
+                {
+                    TcpClient systemclient = await listener.AcceptTcpClientAsync();
+                    NetworkStream stream = systemclient.GetStream();
+                    StreamReader reader = new StreamReader(stream);
+                    string lineToDeserialize = reader.ReadLine();
+                    Message inputMsg = JsonConvert.DeserializeObject<Message>(lineToDeserialize);
+
+                    switch (inputMsg.msgType)
+                    {
+                        case MessageType.SystemMessage:
+                            // Добавить в список клиента
+                            // Разослать всем подключенным клиентам новый список
+                            clients = JsonConvert.DeserializeObject<List<LiteEmployee>>(inputMsg.msgData);
+                            treeView1.Nodes.Clear();
+                            for (int i = 0; i < clients.Count; i++)
+                            {
+                                TreeNode node = new TreeNode(clients[i].lastName + " " + clients[i].firstName[0] + "." + clients[i].middleName[0]+ ".");
+                                treeView1.Nodes.Add(node);
+                            }
+
+                            break;
+                        case MessageType.TextMessage: break;
+                    }
+                }
+            
         }
     }
 }
